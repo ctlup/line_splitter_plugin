@@ -36,6 +36,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink)
+from qgis import processing
 
 
 class LineSplitterAlgorithm(QgsProcessingAlgorithm):
@@ -58,6 +59,7 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
 
     OUTPUT = 'OUTPUT'
     INPUT = 'INPUT'
+    INPUT_POINTS = 'INPUT_POINTS'
 
     def initAlgorithm(self, config):
         """
@@ -71,7 +73,15 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterFeatureSource(
                 self.INPUT,
                 self.tr('Input layer'),
-                [QgsProcessing.TypeVectorAnyGeometry]
+                [QgsProcessing.TypeVectorLine]
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.INPUT_POINTS,
+                self.tr('Points layer'),
+                [QgsProcessing.TypeVectorPoint]
             )
         )
 
@@ -94,8 +104,17 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        points_splitter_layer = self.parameterAsSource(parameters, self.INPUT_POINTS, context)
+        
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
                 context, source.fields(), source.wkbType(), source.sourceCrs())
+
+        
+        line_point_layer = processing.run("native:extractvertices", {'INPUT': source})
+        snapped_layer = processing.run("native:snapgeometries", {'INPUT': points_splitter_layer, 'REFERENCE_LAYER': source, 'TOLERANCE': 100, 'BEHAVIOR': 1})
+        joined_layer = processing.run("native:joinbynearest", {'INPUT':'','INPUT_2':'','FIELDS_TO_COPY':['ord_ass'],'DISCARD_NONMATCHING':False,'PREFIX':'PATH_','NEIGHBORS':2,'MAX_DISTANCE':None,'OUTPUT':'TEMPORARY_OUTPUT'})
+
+        
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
