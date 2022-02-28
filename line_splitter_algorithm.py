@@ -108,13 +108,26 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
                 context, source.fields(), source.wkbType(), source.sourceCrs())
-
+        
         
         line_point_layer = processing.run("native:extractvertices", {'INPUT': source})
         snapped_layer = processing.run("native:snapgeometries", {'INPUT': points_splitter_layer, 'REFERENCE_LAYER': source, 'TOLERANCE': 100, 'BEHAVIOR': 1})
-        joined_layer = processing.run("native:joinbynearest", {'INPUT':'','INPUT_2':'','FIELDS_TO_COPY':['ord_ass'],'DISCARD_NONMATCHING':False,'PREFIX':'PATH_','NEIGHBORS':2,'MAX_DISTANCE':None,'OUTPUT':'TEMPORARY_OUTPUT'})
+        joined_layer = processing.run("native:joinbynearest", {'INPUT':line_point_layer,'INPUT_2':snapped_layer,'FIELDS_TO_COPY':['ord_ass'],'DISCARD_NONMATCHING':False,'PREFIX':'PATH_','NEIGHBORS':2,'MAX_DISTANCE':None,'OUTPUT':'TEMPORARY_OUTPUT'})
 
+        line_point_features = line_point_layer.getFeatures()
+        line_point_f_list = list()
+        # sort line_point_features by ord_ass
+        for feature in line_point_features:
+            line_point_f_list.append(feature)
+        line_point_f_list.sort(key=lambda f: int(f['ord_ass']))
+
+        joined_m = dict()
+        for feature in line_point_features:
+            id = feature.id()
+            if id not in joined_m or (id in joined_m and joined_m[id]["PATH_ord_ass"] > feature["PATH_ord_ass"]):
+                joined_m[id] = feature
         
+
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
