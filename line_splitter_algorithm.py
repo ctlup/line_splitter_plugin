@@ -46,12 +46,13 @@ from qgis.core import (QgsProcessing,
 from qgis import processing
 from qgis.PyQt.QtCore import QVariant
 import tempfile
-import sys
-import pdb
+import string
+import random
+import datetime
 
-def from_point_list(points_features):
-    for f in points_features:
-        point = f.geometry().asPoint()
+
+from os import path
+import pdb
 
 class LineSplitterAlgorithm(QgsProcessingAlgorithm):
     """
@@ -118,7 +119,9 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
 
-        TMP_FOLDER = tempfile.gettempdir()
+
+        rand_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))    
+        TMP_FOLDER = path.join(tempfile.gettempdir(), "QGIS_LINE_SPLITTER_PLUGIN_" + rand_str)
         
 
 
@@ -135,10 +138,10 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
             "native:extractvertices", 
             {
                 'INPUT': '/home/artem/Work_general/ASTRAL_maps/csv/path.gpkg|layername=path', 
-                'OUTPUT':'/home/artem/vertices.'
+                'OUTPUT': TMP_FOLDER +'_vertices.gpkg'
             },
             is_child_algorithm=True))['OUTPUT']
-        pdb.set_trace()
+        # pdb.set_trace()
         snapped_layer = (processing.run(
             "native:snapgeometries", 
             {
@@ -146,7 +149,7 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
                 'REFERENCE_LAYER': source.sourceName(), 
                 'TOLERANCE': 100, 
                 'BEHAVIOR': 1, 
-                'OUTPUT':'TEMPORARY_OUTPUT'
+                'OUTPUT':TMP_FOLDER +'_snapped_layer.gpkg'
             },
             context=context, 
             feedback=feedback, 
@@ -156,14 +159,14 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         joined_layer = (processing.run(
             "native:joinbynearest",
             {
-                'INPUT':line_point_layer,
-                'INPUT_2':snapped_layer,
-                'FIELDS_TO_COPY':['ord_ass'],
+                'INPUT':snapped_layer,
+                'INPUT_2':line_point_layer,
+                'FIELDS_TO_COPY':['vertex_index'],
                 'DISCARD_NONMATCHING':False,
                 'PREFIX':'PATH_',
                 'NEIGHBORS':2,
                 'MAX_DISTANCE':None,
-                'OUTPUT':'TEMPORARY_OUTPUT'
+                'OUTPUT': TMP_FOLDER +'_joined_layer.gpkg'
             },
             context=context, 
             feedback=feedback, 
@@ -173,7 +176,7 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
        
         line_point_layer = QgsVectorLayer(line_point_layer)
         joined_layer = QgsVectorLayer(joined_layer)
-        pdb.set_trace()
+        # pdb.set_trace()
 
         # ----------------------------------
         # path = "/home/artem/File.shp"    
@@ -184,35 +187,35 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         # ----------------------------------
 
         
-        # pdb.set_trace()
+        
         line_point_features = line_point_layer.getFeatures()
         line_point_f_list = list()
         # sort line_point_features by ord_ass
         for feature in line_point_features:
             
             line_point_f_list.append(feature)
-        line_point_f_list.sort(key=lambda f: int(f['ord_ass']))
+        line_point_f_list.sort(key=lambda f: int(f['vertex_index']))
 
         joined_d = dict()
         for feature in joined_layer.getFeatures():
-            
-            id = feature.id()
-            if id not in joined_d or (id in joined_d and joined_d[id]["PATH_ord_ass"] > feature["PATH_ord_ass"]):
+
+            id = feature.geometry().asWkt()
+            if id not in joined_d or (id in joined_d and joined_d[id]["PATH_vertex_index"] > feature["PATH_vertex_index"]):
                 joined_d[id] = feature
 
         invrt_joined = dict()       
     
         for f in joined_d.values():
-            invrt_joined[f["PATH_ord_ass"]] = f
+            invrt_joined[f["PATH_vertex_index"]] = f
         merged_l = list()
         merged_l.append(list())
         for line_f in line_point_f_list:
             merged_l[-1].append(line_f)
-            if line_f["ord_ass"] in invrt_joined:
-                merged_l[-1].append(invrt_joined[line_f["ord_ass"]])
+            if line_f["vertex_index"] in invrt_joined:
+                merged_l[-1].append(invrt_joined[line_f["vertex_index"]])
                 merged_l.append(list())
-                merged_l[-1].append(invrt_joined[line_f["ord_ass"]])
-
+                merged_l[-1].append(invrt_joined[line_f["vertex_index"]])
+        pdb.set_trace()
         for i, l in enumerate(merged_l):
             fet = QgsFeature(output_fields)
             fet.setAttribute('sec_id', i)
