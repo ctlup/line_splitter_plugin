@@ -45,6 +45,8 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFeatureSink)
 from qgis import processing
 from qgis.PyQt.QtCore import QVariant
+import tempfile
+import sys
 import pdb
 
 def from_point_list(points_features):
@@ -115,6 +117,11 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
+
+        TMP_FOLDER = tempfile.gettempdir()
+        
+
+
         source = self.parameterAsSource(parameters, self.INPUT_1, context)
         points_splitter_layer = self.parameterAsSource(parameters, self.INPUT_POINTS, context)
         
