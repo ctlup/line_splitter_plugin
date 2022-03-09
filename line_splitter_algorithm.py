@@ -42,6 +42,7 @@ from qgis.core import (QgsProcessing,
                        QgsVectorFileWriter,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
+                       QgsProcessingParameterBoolean,
                        QgsProcessingParameterFeatureSink)
 from qgis import processing
 from qgis.PyQt.QtCore import QVariant
@@ -75,6 +76,8 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
     OUTPUT = 'OUTPUT'
     INPUT_1 = 'INPUT'
     INPUT_POINTS = 'INPUT_POINTS'
+    DO_ADD_ATTRIBUTES = 'ADD_ATTRIBUTES'
+    ID_FIELD = 'fid'
 
     def initAlgorithm(self, config):
         """
@@ -99,6 +102,8 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
                 [QgsProcessing.TypeVectorPoint]
             )
         )
+
+
 
         # We add a feature sink in which to store our processed features (this
         # usually takes the form of a newly created vector layer when the
@@ -129,7 +134,13 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         points_splitter_layer = self.parameterAsSource(parameters, self.INPUT_POINTS, context)
         
         output_fields = QgsFields()
-        output_fields.append(QgsField("sec_id", QVariant.Int))
+        output_fields.append(QgsField(self.ID_FIELD, QVariant.Int))
+
+        source_fields = source.fields().toList()
+        
+        for field in source_fields:
+            output_fields.append(field)
+
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
                 context, output_fields, source.wkbType(), source.sourceCrs())
         
@@ -208,18 +219,32 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         for f in joined_d.values():
             invrt_joined[f["PATH_vertex_index"]] = f
         merged_l = list()
-        merged_l.append(list())
-        for line_f in line_point_f_list:
-            merged_l[-1].append(line_f)
-            if line_f["vertex_index"] in invrt_joined:
-                merged_l[-1].append(invrt_joined[line_f["vertex_index"]])
-                merged_l.append(list())
-                merged_l[-1].append(invrt_joined[line_f["vertex_index"]])
-        pdb.set_trace()
-        for i, l in enumerate(merged_l):
+        merged_l.append({
+            "field_ref": None,
+            "f_list": list()
+            })
+
+        for point_f in line_point_f_list:
+            if merged_l[-1]["field_ref"] is None:
+                merged_l[-1]["field_ref"] = point_f
+            merged_l[-1]["f_list"].append(point_f)
+            if point_f["vertex_index"] in invrt_joined:
+                merged_l[-1]["f_list"].append(invrt_joined[point_f["vertex_index"]])
+                merged_l.append({
+                "field_ref": None,
+                "f_list": list()
+                })
+                merged_l[-1]["f_list"].append(invrt_joined[point_f["vertex_index"]])
+        # pdb.set_trace()
+        
+        for i, p_list in enumerate(merged_l):
+            if p_list["field_ref"] is None:
+                continue
             fet = QgsFeature(output_fields)
-            fet.setAttribute('sec_id', i)
-            fet.setGeometry(QgsGeometry.fromPolylineXY([f.geometry().asPoint() for f in l]))
+            fet.setAttribute(self.ID_FIELD, i)
+            for field in source_fields:
+                fet.setAttribute(field.name(), p_list["field_ref"][field.name()])
+            fet.setGeometry(QgsGeometry.fromPolylineXY([f.geometry().asPoint() for f in p_list["f_list"]]))
             sink.addFeature(fet, QgsFeatureSink.FastInsert)
         # Compute the number of steps to display within the progress bar and
         # get features from source
