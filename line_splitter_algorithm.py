@@ -148,7 +148,7 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         line_point_layer = (processing.run(
             "native:extractvertices", 
             {
-                'INPUT': '/home/artem/Work_general/ASTRAL_maps/csv/path.gpkg|layername=path', 
+                'INPUT': source.sourceName(), 
                 'OUTPUT': TMP_FOLDER +'_vertices.gpkg'
             },
             is_child_algorithm=True))['OUTPUT']
