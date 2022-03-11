@@ -30,6 +30,8 @@ __copyright__ = '(C) 2022 by Artsiom Sauchuk, CTLup'
 
 __revision__ = '$Format:%H$'
 
+from hashlib import new
+from tkinter import N
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessing,
                        QgsFeatureSink,
@@ -50,10 +52,18 @@ import tempfile
 import string
 import random
 import datetime
+from itertools import product
 
 
 from os import path
 import pdb
+
+class SubLine:
+    def __init__(self) -> None:
+        self.vertices = list()
+        self.line_fields = None
+        self.beginning_point_fields = None
+        self.ending_point_fields = None
 
 class LineSplitterAlgorithm(QgsProcessingAlgorithm):
     """
@@ -78,6 +88,8 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
     INPUT_POINTS = 'INPUT_POINTS'
     DO_ADD_ATTRIBUTES = 'ADD_ATTRIBUTES'
     ID_FIELD = 'fid'
+    BEGINNING_POINT_PREFIX = 'b_'
+    ENDING_POINT_PREFIX = 'e_'
 
     def initAlgorithm(self, config):
         """
@@ -137,7 +149,14 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         output_fields.append(QgsField(self.ID_FIELD, QVariant.Int))
 
         source_fields = source.fields().toList()
-        
+        splitting_points_fields = points_splitter_layer.fields().toList()
+
+        for pref, field in product([self.BEGINNING_POINT_PREFIX, self.ENDING_POINT_PREFIX], splitting_points_fields):
+            n_field = QgsField(field)
+            n_field.setName(pref + field.name())
+
+            output_fields.append(n_field)
+
         for field in source_fields:
             output_fields.append(field)
 
@@ -219,32 +238,42 @@ class LineSplitterAlgorithm(QgsProcessingAlgorithm):
         for f in joined_d.values():
             invrt_joined[f["PATH_vertex_index"]] = f
         merged_l = list()
-        merged_l.append({
-            "field_ref": None,
-            "f_list": list()
-            })
+        merged_l.append(SubLine())
 
         for point_f in line_point_f_list:
-            if merged_l[-1]["field_ref"] is None:
-                merged_l[-1]["field_ref"] = point_f
-            merged_l[-1]["f_list"].append(point_f)
+            if merged_l[-1].line_fields is None:
+                merged_l[-1].line_fields = point_f
+            merged_l[-1].vertices.append(point_f)
             if point_f["vertex_index"] in invrt_joined:
-                merged_l[-1]["f_list"].append(invrt_joined[point_f["vertex_index"]])
-                merged_l.append({
-                "field_ref": None,
-                "f_list": list()
-                })
-                merged_l[-1]["f_list"].append(invrt_joined[point_f["vertex_index"]])
+                merged_l[-1].vertices.append(invrt_joined[point_f["vertex_index"]])
+                merged_l[-1].ending_point_fields = invrt_joined[point_f["vertex_index"]]
+                merged_l.append(SubLine())
+                merged_l[-1].beginning_point_fields = invrt_joined[point_f["vertex_index"]]
+                merged_l[-1].vertices.append(invrt_joined[point_f["vertex_index"]])
         # pdb.set_trace()
         
-        for i, p_list in enumerate(merged_l):
-            if p_list["field_ref"] is None:
+        for i, subLine in enumerate(merged_l):
+            vertices = subLine.vertices
+            beginning = subLine.beginning_point_fields
+            ending = subLine.ending_point_fields
+            if subLine.line_fields is None:
                 continue
             fet = QgsFeature(output_fields)
             fet.setAttribute(self.ID_FIELD, i)
+            if beginning is not None:
+                for field in splitting_points_fields:
+                    fet.setAttribute(self.BEGINNING_POINT_PREFIX + field.name(), beginning[field.name()])
+            if ending is not None:
+                for field in splitting_points_fields:
+                    fet.setAttribute(self.ENDING_POINT_PREFIX + field.name(), ending[field.name()])
+            
             for field in source_fields:
-                fet.setAttribute(field.name(), p_list["field_ref"][field.name()])
-            fet.setGeometry(QgsGeometry.fromPolylineXY([f.geometry().asPoint() for f in p_list["f_list"]]))
+                fet.setAttribute(field.name(), subLine.line_fields[field.name()])
+            
+            # if the division point is far before the beginning of the line
+            if len(vertices) == 2 and vertices[0].geometry().equals(vertices[1].geometry()):
+                continue
+            fet.setGeometry(QgsGeometry.fromPolylineXY([f.geometry().asPoint() for f in subLine.vertices]))
             sink.addFeature(fet, QgsFeatureSink.FastInsert)
         # Compute the number of steps to display within the progress bar and
         # get features from source
