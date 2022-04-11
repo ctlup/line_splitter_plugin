@@ -30,8 +30,6 @@ __copyright__ = '(C) 2022 by Artsiom Sauchuk, CTLup'
 
 __revision__ = '$Format:%H$'
 
-from hashlib import new
-from tkinter import N
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessing,
                        QgsFeatureSink,
